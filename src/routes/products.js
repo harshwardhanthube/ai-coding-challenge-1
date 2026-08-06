@@ -2,7 +2,7 @@ const express = require('express');
 const Product = require('../models/product');
 const Category = require('../models/category');
 const { AppError } = require('../errors');
-const { asyncHandler, validateObjectId, validateProductInput } = require('../middleware');
+const { asyncHandler, validateObjectId, validateProductInput, validateStockInput } = require('../middleware');
 
 const router = express.Router();
 
@@ -48,17 +48,15 @@ router.get('/:id/stock', validateObjectId, asyncHandler(async (req, res) => {
   res.json({ data: { productId: product._id, qty: product.qty } });
 }));
 
-router.put('/:id/stock', validateObjectId, asyncHandler(async (req, res) => {
-  const { qty } = req.body || {};
-  if (!Number.isInteger(qty) || qty < 0) throw new AppError(400, 'qty must be a non-negative integer');
+router.put('/:id/stock', validateObjectId, validateStockInput('qty'), asyncHandler(async (req, res) => {
+  const { qty } = req.body;
   const product = await Product.findByIdAndUpdate(req.params.id, { qty }, { new: true, runValidators: true }).select('_id qty');
   if (!product) throw new AppError(404, 'Product not found');
   res.json({ data: { productId: product._id, qty: product.qty } });
 }));
 
-router.post('/:id/stock/adjust', validateObjectId, asyncHandler(async (req, res) => {
-  const { delta } = req.body || {};
-  if (!Number.isInteger(delta) || delta === 0) throw new AppError(400, 'delta must be a non-zero integer');
+router.post('/:id/stock/adjust', validateObjectId, validateStockInput('delta', { nonZero: true }), asyncHandler(async (req, res) => {
+  const { delta } = req.body;
   const filter = { _id: req.params.id, ...(delta < 0 ? { qty: { $gte: Math.abs(delta) } } : {}) };
   const product = await Product.findOneAndUpdate(filter, { $inc: { qty: delta } }, { new: true }).select('_id qty');
   if (!product) {
